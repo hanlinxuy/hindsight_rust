@@ -128,7 +128,7 @@ hindsight-core.h                    # C 头文件
 
 ## 编译状态
 
-在 DGX Spark（ARM64 Ubuntu, NVIDIA Grace）上验证：
+在 ARM64 Linux 服务器上验证：
 
 | Target | 产出 | 大小 | 状态 |
 |--------|------|------|------|

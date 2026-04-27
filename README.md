@@ -155,23 +155,10 @@ cargo test --test integration_test
 ### 方案二：远程 ARM64 交叉编译服务器
 
 如果目标是 ARM64 平台（HarmonyOS / Android / Linux ARM64），需要一台 ARM64 Linux 服务器做交叉编译。
-当前开发用的是局域网内的 homelinux 服务器。
-
-**SSH 配置**（`~/.ssh/config`）：
-
-```
-Host homelinux
-    HostName 10.0.8.6
-    Port 9981
-    User hanlinxu
-```
 
 **服务器环境准备**（只需一次）：
 
 ```bash
-# 登录服务器
-ssh homelinux
-
 # 安装 Rust（如果网速慢，可以用国内镜像）
 export RUSTUP_DIST_SERVER=https://mirrors.tuna.tsinghua.edu.cn/rustup
 export RUSTUP_UPDATE_ROOT=https://mirrors.tuna.tsinghua.edu.cn/rustup
@@ -187,36 +174,23 @@ rustup target add aarch64-linux-android
 
 ```bash
 # 本地改代码，rsync 到服务器
-rsync -avz --exclude target ./ hanlinxu@10.0.8.6:/home/hanlinxu/hindsight-core/
+rsync -avz --exclude target ./ <user>@<server>:/path/to/hindsight-core/
 
 # SSH 上去编译
-ssh homelinux "cd ~/hindsight-core && cargo build --release"
-ssh homelinux "cd ~/hindsight-core && cargo test --test storage_test"
+ssh <server> "cd ~/hindsight-core && cargo build --release"
+ssh <server> "cd ~/hindsight-core && cargo test --test storage_test"
 
 # 拿回编译产物
-scp homelinux:~/hindsight-core/target/release/libhindsight_core.so .
-```
-
-**快捷脚本**（可选）：
-
-```bash
-# scripts/remote-build.sh — 一键 rsync + SSH 编译 + scp 回产物
-#!/bin/bash
-REMOTE=homelinux
-REMOTE_DIR=~/hindsight-core
-rsync -avz --exclude target ./ $REMOTE:$REMOTE_DIR/
-ssh $REMOTE "cd $REMOTE_DIR && cargo build --release \$*"
-scp $REMOTE:$REMOTE_DIR/target/release/libhindsight_core.so ./build/
-echo "✅ libhindsight_core.so -> build/"
+scp <server>:~/hindsight-core/target/release/libhindsight_core.so .
 ```
 
 ### 外部服务依赖
 
-| 服务 | 地址 | 用途 | 是否必需 |
-|------|------|------|----------|
-| LLM API | `https://api.deepseek.com` | 事实提取/反思推理/rerank | 集成测试需要，单元测试不需要 |
-| Embedding API | `http://10.0.8.6:8001` | bge-m3 向量嵌入 (1024维) | 集成测试需要 |
-| ARM64 服务器 | `10.0.8.6:9981` | 交叉编译 | 只在编译 ARM64 时需要 |
+| 服务 | 用途 | 是否必需 |
+|------|------|----------|
+| LLM API（OpenAI 兼容） | 事实提取/反思推理/rerank | 集成测试需要，单元测试不需要 |
+| Embedding API（bge-m3） | 向量嵌入 (1024维) | 集成测试需要 |
+| ARM64 Linux 服务器 | 交叉编译 | 只在编译 ARM64 时需要 |
 
 单元测试（`storage_test`）纯 SQLite 操作，不需要任何外部服务。
 

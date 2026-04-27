@@ -1,5 +1,5 @@
 /// End-to-end profile building test: retain 50 facts → recall → reflect a user profile.
-/// Uses DeepSeek for LLM + homelinux for embeddings.
+/// Uses DeepSeek for LLM + remote embedding server.
 use hindsight_core::engine::MemoryEngine;
 use hindsight_core::models::Disposition;
 use std::env;
