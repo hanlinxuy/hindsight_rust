@@ -125,17 +125,129 @@ hindsight-core/
 | integration_test | 5 | 真实 API 集成测试 |
 | profile_test | 1 | 50条中文事实 → recall → reflect → consolidate |
 
+## 开发环境搭建
+
+### 方案一：本地 macOS 开发（推荐）
+
+macOS 本机即可编译运行，无需远程服务器。macOS 版本用于功能开发和单元测试。
+
+```bash
+# 1. 安装 Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# 2. 克隆并构建
+git clone https://github.com/hanlinxuy/hindsight_rust.git
+cd hindsight_rust
+cargo build --release
+
+# 3. 运行单元测试（不需要任何外部服务）
+cargo test --test storage_test
+
+# 4. 运行集成测试（需要 LLM + Embedding 服务）
+HINDSIGHT_TEST_API_KEY=your-key \
+HINDSIGHT_TEST_BASE_URL=https://api.deepseek.com \
+HINDSIGHT_TEST_MODEL=deepseek-chat \
+HINDSIGHT_TEST_EMBEDDING_BASE_URL=http://your-embedding-server:8001 \
+HINDSIGHT_TEST_EMBEDDING_MODEL=bge-m3 \
+cargo test --test integration_test
+```
+
+### 方案二：远程 ARM64 交叉编译服务器
+
+如果目标是 ARM64 平台（HarmonyOS / Android / Linux ARM64），需要一台 ARM64 Linux 服务器做交叉编译。
+当前开发用的是局域网内的 homelinux 服务器。
+
+**SSH 配置**（`~/.ssh/config`）：
+
+```
+Host homelinux
+    HostName 10.0.8.6
+    Port 9981
+    User hanlinxu
+```
+
+**服务器环境准备**（只需一次）：
+
+```bash
+# 登录服务器
+ssh homelinux
+
+# 安装 Rust（如果网速慢，可以用国内镜像）
+export RUSTUP_DIST_SERVER=https://mirrors.tuna.tsinghua.edu.cn/rustup
+export RUSTUP_UPDATE_ROOT=https://mirrors.tuna.tsinghua.edu.cn/rustup
+curl --proto '=https' -sSf https://sh.rustup.rs | sh
+
+# 安装目标平台
+rustup target add aarch64-unknown-linux-gnu
+rustup target add aarch64-unknown-linux-ohos
+rustup target add aarch64-linux-android
+```
+
+**日常开发流程**：
+
+```bash
+# 本地改代码，rsync 到服务器
+rsync -avz --exclude target ./ hanlinxu@10.0.8.6:/home/hanlinxu/hindsight-core/
+
+# SSH 上去编译
+ssh homelinux "cd ~/hindsight-core && cargo build --release"
+ssh homelinux "cd ~/hindsight-core && cargo test --test storage_test"
+
+# 拿回编译产物
+scp homelinux:~/hindsight-core/target/release/libhindsight_core.so .
+```
+
+**快捷脚本**（可选）：
+
+```bash
+# scripts/remote-build.sh — 一键 rsync + SSH 编译 + scp 回产物
+#!/bin/bash
+REMOTE=homelinux
+REMOTE_DIR=~/hindsight-core
+rsync -avz --exclude target ./ $REMOTE:$REMOTE_DIR/
+ssh $REMOTE "cd $REMOTE_DIR && cargo build --release \$*"
+scp $REMOTE:$REMOTE_DIR/target/release/libhindsight_core.so ./build/
+echo "✅ libhindsight_core.so -> build/"
+```
+
+### 外部服务依赖
+
+| 服务 | 地址 | 用途 | 是否必需 |
+|------|------|------|----------|
+| LLM API | `https://api.deepseek.com` | 事实提取/反思推理/rerank | 集成测试需要，单元测试不需要 |
+| Embedding API | `http://10.0.8.6:8001` | bge-m3 向量嵌入 (1024维) | 集成测试需要 |
+| ARM64 服务器 | `10.0.8.6:9981` | 交叉编译 | 只在编译 ARM64 时需要 |
+
+单元测试（`storage_test`）纯 SQLite 操作，不需要任何外部服务。
+
+### 编辑器推荐
+
+- **VS Code + rust-analyzer**：代码补全、跳转定义、内联错误
+- **CLion + Rust 插件**：更强大的调试支持
+- 掯荐开启 `cargo check` 自动保存检查
+
 ## 跨平台编译
 
 ```bash
-# 一键编译三平台
+# 一键编译三平台（需要 ARM64 服务器 + 对应 target 已安装）
 ./scripts/build-all.sh release
 
 # 或单独编译
 cargo build --target aarch64-unknown-linux-ohos --release   # HarmonyOS
 cargo build --target aarch64-linux-android --release         # Android
 cargo build --target aarch64-unknown-linux-gnu --release     # Linux ARM64
+
+# macOS 本机编译（开发调试用）
+cargo build --release
 ```
+
+### OHOS 编译注意事项
+
+HarmonyOS target (`aarch64-unknown-linux-ohos`) 需要两个 stub 库才能链接通过：
+- `libunwind.so`
+- `libtime_service_ndk.so`
+
+这两个库在真实鸿蒙设备上有系统实现，编译时只需 stub。参见 `scripts/build-all.sh` 中的处理逻辑。
 
 ## 与 Python 版差异
 
